@@ -134,7 +134,7 @@ export default function DesignAgent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: "claude-sonnet-4-6",
           max_tokens: 4096,
           system: SYSTEM_PROMPT,
           messages: history.map(m => ({ role: m.role, content: m.content })),
