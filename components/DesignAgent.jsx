@@ -19,17 +19,17 @@ DESIGN RULES — always apply:
 • Generous spacing, intentional typographic scale (use clamp() for fluid type)
 • Layer depth: subtle box-shadow or border hierarchy to create visual layers
 
-OUTPUT — respond ONLY with this JSON object, no markdown fences, no text outside the JSON:
-{
-  "type": "html" | "react",
-  "preview": "<COMPLETE standalone HTML document — embed fonts, all CSS, all JS — renderable in an iframe with no external dependencies>",
-  "code": "<production deliverable: full HTML file OR full React component with Tailwind>",
-  "tech": "<one sentence: why this specific tech choice for this request>",
-  "suggestions": ["<short actionable follow-up 1>", "<short actionable follow-up 2>", "<short actionable follow-up 3>"]
-}
+OUTPUT FORMAT — use this exact delimiter format, nothing else:
+<<<META>>>
+TYPE: html or react
+TECH: one sentence explaining the tech choice
+SUGGESTIONS: suggestion1 | suggestion2 | suggestion3
+<<<CODE>>>
+(paste the full code here — no JSON escaping)
+<<<END>>>
 
-The preview field must ALWAYS be a complete, self-contained HTML document (even for React outputs — render a polished static HTML representation of the component).
-The code field is what the developer ships.`;
+For html: complete self-contained HTML file with all fonts/CSS/JS embedded — renders directly in an iframe.
+For react: complete functional React component with Tailwind classes.`;
 
 const EXAMPLES = [
   { icon: "◈", text: "Dashboard analytics avec graphiques" },
@@ -43,9 +43,12 @@ function TypeBadge({ type }) {
   return (
     <span style={{
       fontFamily: "'JetBrains Mono', monospace",
-      fontSize: 10, fontWeight: 500,
-      letterSpacing: "0.06em", textTransform: "uppercase",
-      padding: "3px 7px", borderRadius: 5,
+      fontSize: 10,
+      fontWeight: 500,
+      letterSpacing: "0.06em",
+      textTransform: "uppercase",
+      padding: "3px 7px",
+      borderRadius: 5,
       background: isReact ? "rgba(139,92,246,0.15)" : "rgba(16,185,129,0.12)",
       color: isReact ? "#a78bfa" : "#34d399",
       border: `1px solid ${isReact ? "rgba(139,92,246,0.3)" : "rgba(16,185,129,0.25)"}`,
@@ -60,7 +63,8 @@ function LoadingDots() {
     <div style={{ display: "flex", gap: 5, padding: "14px 16px", alignItems: "center" }}>
       {[0, 1, 2].map(i => (
         <div key={i} style={{
-          width: 7, height: 7, borderRadius: "50%", background: "#6366f1",
+          width: 7, height: 7, borderRadius: "50%",
+          background: "#6366f1",
           animation: `da-bounce 1.1s ${i * 0.18}s infinite ease-in-out`,
         }} />
       ))}
@@ -81,6 +85,7 @@ export default function DesignAgent() {
   const [hasResult, setHasResult] = useState(false);
 
   const chatRef = useRef(null);
+  const textareaRef = useRef(null);
 
   useEffect(() => {
     if (!document.getElementById("da-gfonts")) {
@@ -91,25 +96,19 @@ export default function DesignAgent() {
       document.head.appendChild(l);
     }
     const style = document.createElement("style");
-    style.id = "da-styles";
-    if (!document.getElementById("da-styles")) {
-      style.textContent = `
-        @keyframes da-bounce { 0%,80%,100%{transform:translateY(0);opacity:.4} 40%{transform:translateY(-6px);opacity:1} }
-        @keyframes da-fade-in { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
-        .da-chip:hover { background: rgba(99,102,241,.15) !important; border-color: rgba(99,102,241,.35) !important; color: #c7d2fe !important; }
-        .da-send:hover:not(:disabled) { opacity:.85 !important; }
-        .da-send:active:not(:disabled) { transform: scale(.97); }
-        .da-tab:hover { color: #c7d2fe !important; }
-        .da-copy:hover { background: rgba(99,102,241,.2) !important; }
-        .da-msg-user { animation: da-fade-in .2s ease; }
-        .da-msg-ai { animation: da-fade-in .2s ease; }
-        * { box-sizing: border-box; }
-        ::-webkit-scrollbar { width: 3px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #2a2a40; border-radius: 3px; }
-      `;
-      document.head.appendChild(style);
-    }
+    style.textContent = `
+      @keyframes da-bounce { 0%,80%,100%{transform:translateY(0);opacity:.4} 40%{transform:translateY(-6px);opacity:1} }
+      @keyframes da-fade-in { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+      .da-chip:hover { background: rgba(99,102,241,.15) !important; border-color: rgba(99,102,241,.35) !important; color: #c7d2fe !important; }
+      .da-send:hover:not(:disabled) { opacity:.85 !important; }
+      .da-send:active:not(:disabled) { transform: scale(.97); }
+      .da-tab:hover { color: #c7d2fe !important; }
+      .da-copy:hover { background: rgba(99,102,241,.2) !important; }
+      .da-msg-user { animation: da-fade-in .2s ease; }
+      .da-msg-ai { animation: da-fade-in .2s ease; }
+      ::-webkit-scrollbar { width: 3px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #2a2a40; border-radius: 3px; }
+    `;
+    document.head.appendChild(style);
   }, []);
 
   useEffect(() => {
@@ -129,43 +128,55 @@ export default function DesignAgent() {
     setMessages(history);
 
     try {
-      // Appel vers notre API route Next.js (proxy sécurisé)
-      const res = await fetch("/api/generate", {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
-          max_tokens: 4096,
+          max_tokens: 8192,
           system: SYSTEM_PROMPT,
           messages: history.map(m => ({ role: m.role, content: m.content })),
         }),
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
       const data = await res.json();
+      if (data.error) throw new Error(data.error.message || "API error");
       const raw = (data.content || []).map(b => b.text || "").join("");
-      const clean = raw.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
-      const result = JSON.parse(clean);
 
-      setPreview(result.preview || "");
-      setCode(result.code || "");
-      setCodeType(result.type || "html");
-      setSuggestions(result.suggestions || []);
-      setTab("preview");
+      const metaMatch = raw.match(/<<<META>>>([\s\S]*?)<<<CODE>>>/);
+      const codeMatch = raw.match(/<<<CODE>>>([\s\S]*?)<<<END>>>/);
+      if (!metaMatch || !codeMatch) throw new Error("Format invalide: " + raw.slice(0, 200));
+
+      const meta = metaMatch[1].trim();
+      const parsedCode = codeMatch[1].trim();
+
+      const typeMatch = meta.match(/TYPE:\s*(\S+)/i);
+      const techMatch = meta.match(/TECH:\s*(.+)/i);
+      const suggMatch = meta.match(/SUGGESTIONS:\s*(.+)/i);
+
+      const parsedType = typeMatch ? typeMatch[1].toLowerCase() : "html";
+      const parsedTech = techMatch ? techMatch[1].trim() : "";
+      const parsedSugg = suggMatch ? suggMatch[1].split("|").map(s => s.trim()).filter(Boolean) : [];
+
+      setCode(parsedCode);
+      setPreview(parsedType === "html" ? parsedCode : "");
+      setCodeType(parsedType);
+      setSuggestions(parsedSugg);
+      setTab(parsedType === "react" ? "code" : "preview");
       setHasResult(true);
 
       setMessages(prev => [...prev, {
         role: "assistant",
-        content: clean,
-        type: result.type,
-        tech: result.tech,
+        content: parsedCode.slice(0, 300),
+        type: parsedType,
+        tech: parsedTech,
       }]);
-    } catch {
+    } catch (err) {
       setMessages(prev => [...prev, {
         role: "assistant",
         content: "__error__",
         error: true,
+        errorMsg: err?.message || String(err),
       }]);
     }
 
@@ -179,6 +190,7 @@ export default function DesignAgent() {
     });
   };
 
+  // ─── Layout & style tokens ────────────────────────────────
   const BG = "#07070f";
   const SURFACE = "#0e0e1a";
   const BORDER = "#18182e";
@@ -193,7 +205,8 @@ export default function DesignAgent() {
       fontFamily: "'DM Sans', sans-serif",
       overflow: "hidden",
     }}>
-      {/* HEADER */}
+
+      {/* ── HEADER ─────────────────────────────────────────── */}
       <header style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "11px 20px", borderBottom: `1px solid ${BORDER}`,
@@ -203,8 +216,8 @@ export default function DesignAgent() {
           <div style={{
             width: 30, height: 30,
             background: "linear-gradient(135deg, #6366f1 0%, #a78bfa 100%)",
-            borderRadius: 9, display: "flex", alignItems: "center",
-            justifyContent: "center", fontSize: 14, color: "white", fontWeight: 600,
+            borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 14, color: "white", fontWeight: 600,
           }}>✦</div>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, letterSpacing: ".04em", lineHeight: 1.2 }}>Design Agent</div>
@@ -217,7 +230,7 @@ export default function DesignAgent() {
         </div>
       </header>
 
-      {/* BODY */}
+      {/* ── BODY ───────────────────────────────────────────── */}
       <div style={{ display: "flex", flex: 1, overflow: "hidden", minHeight: 0 }}>
 
         {/* LEFT: CHAT */}
@@ -227,6 +240,8 @@ export default function DesignAgent() {
           borderRight: `1px solid ${BORDER}`,
           background: SURFACE,
         }}>
+
+          {/* Messages */}
           <div ref={chatRef} style={{
             flex: 1, overflowY: "auto",
             padding: 14, display: "flex", flexDirection: "column", gap: 10,
@@ -234,12 +249,15 @@ export default function DesignAgent() {
             {messages.length === 0 ? (
               <div style={{
                 display: "flex", flexDirection: "column", alignItems: "center",
-                justifyContent: "center", height: "100%", gap: 18, padding: "0 8px", textAlign: "center",
+                justifyContent: "center", height: "100%", gap: 18, padding: "0 8px",
+                textAlign: "center",
               }}>
                 <div style={{
                   width: 56, height: 56, borderRadius: 16,
-                  background: "rgba(99,102,241,.12)", border: "1px solid rgba(99,102,241,.2)",
-                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26,
+                  background: "rgba(99,102,241,.12)",
+                  border: "1px solid rgba(99,102,241,.2)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 26,
                 }}>✦</div>
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: "#c8d0e8" }}>Décris ton interface</div>
@@ -281,7 +299,7 @@ export default function DesignAgent() {
                   <div key={i} className="da-msg-ai" style={{
                     background: "rgba(239,68,68,.09)", border: `1px solid rgba(239,68,68,.2)`,
                     borderRadius: 9, padding: "9px 12px", fontSize: 12, color: "#f87171",
-                  }}>⚠ Erreur lors de la génération. Reformule ta demande.</div>
+                  }}>⚠ {m.errorMsg || "Erreur inconnue"}</div>
                 );
                 return (
                   <div key={i} className="da-msg-ai" style={{
@@ -292,7 +310,9 @@ export default function DesignAgent() {
                   }}>
                     <TypeBadge type={m.type} />
                     {m.tech && (
-                      <div style={{ fontSize: 11, color: MUTED, lineHeight: 1.5, marginTop: 2 }}>{m.tech}</div>
+                      <div style={{ fontSize: 11, color: MUTED, lineHeight: 1.5, marginTop: 2 }}>
+                        {m.tech}
+                      </div>
                     )}
                   </div>
                 );
@@ -301,6 +321,7 @@ export default function DesignAgent() {
             {loading && <LoadingDots />}
           </div>
 
+          {/* Suggestions */}
           {suggestions.length > 0 && (
             <div style={{
               padding: "8px 12px", borderTop: `1px solid ${BORDER}`,
@@ -322,8 +343,10 @@ export default function DesignAgent() {
             </div>
           )}
 
+          {/* Input */}
           <div style={{ padding: "11px 12px", borderTop: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", gap: 8 }}>
             <textarea
+              ref={textareaRef}
               rows={3}
               placeholder="Décris l'interface à créer…"
               value={input}
@@ -337,7 +360,8 @@ export default function DesignAgent() {
                 borderRadius: 10, padding: "9px 12px",
                 color: TEXT, fontSize: 13, fontFamily: "'DM Sans', sans-serif",
                 resize: "none", outline: "none", lineHeight: 1.55,
-                width: "100%", transition: "border-color .15s",
+                width: "100%", boxSizing: "border-box",
+                transition: "border-color .15s",
               }}
             />
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -365,14 +389,16 @@ export default function DesignAgent() {
 
         {/* RIGHT: PREVIEW + CODE */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+          {/* Toolbar */}
           <div style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",
             padding: "9px 16px", borderBottom: `1px solid ${BORDER}`,
             background: SURFACE, flexShrink: 0,
           }}>
             <div style={{
-              display: "flex", gap: 2, background: "#0b0b17",
-              borderRadius: 9, padding: 3, border: `1px solid ${BORDER}`,
+              display: "flex", gap: 2,
+              background: "#0b0b17", borderRadius: 9,
+              padding: 3, border: `1px solid ${BORDER}`,
             }}>
               {["preview", "code"].map(t => (
                 <button key={t} className="da-tab"
@@ -397,11 +423,13 @@ export default function DesignAgent() {
                 <button className="da-copy"
                   onClick={copyCode}
                   style={{
-                    background: "rgba(99,102,241,.1)", border: `1px solid rgba(99,102,241,.25)`,
+                    background: "rgba(99,102,241,.1)",
+                    border: `1px solid rgba(99,102,241,.25)`,
                     borderRadius: 8, padding: "5px 14px",
                     fontSize: 12, color: "#818cf8", cursor: "pointer",
                     fontFamily: "'JetBrains Mono', monospace",
-                    transition: "background .15s", display: "flex", alignItems: "center", gap: 5,
+                    transition: "background .15s",
+                    display: "flex", alignItems: "center", gap: 5,
                   }}
                 >
                   {copied ? "✓ Copié" : "⌘ Copier"}
@@ -410,6 +438,7 @@ export default function DesignAgent() {
             </div>
           </div>
 
+          {/* Content */}
           <div style={{ flex: 1, overflow: "hidden", position: "relative", background: BG }}>
             {!hasResult ? (
               <div style={{
@@ -422,12 +451,34 @@ export default function DesignAgent() {
                 </div>
               </div>
             ) : tab === "preview" ? (
-              <iframe
-                srcDoc={preview}
-                sandbox="allow-scripts"
-                title="UI Preview"
-                style={{ width: "100%", height: "100%", border: "none" }}
-              />
+              codeType === "react" ? (
+                <div style={{
+                  display: "flex", flexDirection: "column", alignItems: "center",
+                  justifyContent: "center", height: "100%", gap: 12, padding: 32, textAlign: "center"
+                }}>
+                  <div style={{ fontSize: 36 }}>⚛</div>
+                  <div style={{ fontSize: 13, color: "#818cf8", fontFamily: "'JetBrains Mono', monospace" }}>Composant React</div>
+                  <div style={{ fontSize: 12, color: "#3a3a5a", maxWidth: 280, lineHeight: 1.6 }}>
+                    Les composants React nécessitent un environnement compilé pour être prévisualisés.
+                    Copie le code et ouvre-le dans un projet React ou sur codesandbox.io
+                  </div>
+                  <a href="https://codesandbox.io/s/new" target="_blank" rel="noreferrer" style={{
+                    marginTop: 8, padding: "8px 18px",
+                    background: "rgba(99,102,241,.12)", border: "1px solid rgba(99,102,241,.3)",
+                    borderRadius: 8, color: "#818cf8", fontSize: 12,
+                    fontFamily: "'DM Sans', sans-serif", cursor: "pointer", textDecoration: "none"
+                  }}>
+                    Ouvrir CodeSandbox →
+                  </a>
+                </div>
+              ) : (
+                <iframe
+                  srcDoc={preview}
+                  sandbox="allow-scripts"
+                  title="UI Preview"
+                  style={{ width: "100%", height: "100%", border: "none" }}
+                />
+              )
             ) : (
               <pre style={{
                 margin: 0, padding: "20px 24px",
@@ -435,6 +486,7 @@ export default function DesignAgent() {
                 fontSize: 12, lineHeight: 1.75,
                 color: "#b8c0d8", background: BG,
                 overflow: "auto", height: "100%",
+                boxSizing: "border-box",
                 whiteSpace: "pre-wrap", wordBreak: "break-word",
               }}>
                 {code}
